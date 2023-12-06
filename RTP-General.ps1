@@ -10,11 +10,15 @@
 LogPath = "C:\TEMP\Boxstarter_Log.txt"
 Start-Transcript -Path $LogPath
 #
-# Install Chocolatey and Boxstarter: -- You might need to set: Set-ExecutionPolicy RemoteSigned --
+# Install Chocolatey
 . { iwr -useb https://chocolatey.org/install.ps1 } | iex
+
+# Add Chocolatey bin directory to PATH
 $env:Path = "$env:Path;C:\ProgramData\chocolatey\bin"
+
+# Install Boxstarter
 . { iwr -useb http://boxstarter.org/bootstrapper.ps1 } | iex; get-boxstarter -Force
-#
+
 # Checking if running from the bootstrapper
 if (!(Get-Command "Install-BoxstarterPackage" -ErrorAction SilentlyContinue)) {
     # If not, install Boxstarter
