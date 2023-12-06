@@ -328,6 +328,19 @@ Push-Preparation
 Set-ChocoFeatures
 choco install boxstarter chocolatey
 
+# Add Chocolatey to PATH
+$chocoPath = Join-Path $env:ProgramData 'chocolatey\bin'
+$existingPath = [System.Environment]::GetEnvironmentVariable('PATH', [System.EnvironmentVariableTarget]::Machine)
+if ($existingPath -notcontains $chocoPath) {
+    [System.Environment]::SetEnvironmentVariable('PATH', "$existingPath;$chocoPath", [System.EnvironmentVariableTarget]::Machine)
+}
+
+# Close the current PowerShell session
+exit
+
+# Continue the script in a new PowerShell terminal
+Start-Process powershell.exe -ArgumentList "-File $PSCommandPath" -Verb RunAs
+
 ###########################################################################
 ### Windows Features
 
