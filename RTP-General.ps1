@@ -1,188 +1,360 @@
-# Description: Boxstarter Script
-# Author: Jess Frazelle <jess@linux.com>
-# Fork Modifications: Sean Ronald
-# Last Updated: 2023-12-06
-#
-#
-# To use:
-#   From a fresh box, open Edge browser and enter this URL: https://boxstarter.org/package/url?https://github.com/seanrtprime/Boxstarter-Packages/blob/main/RTP-General.ps1
-#
-LogPath = "C:\TEMP\Boxstarter_Log.txt"
-Start-Transcript -Path $LogPath
-#
-# Install Chocolatey
-. { iwr -useb https://chocolatey.org/install.ps1 } | iex
+<#
+.SYNOPSIS
+The setup scripts by Boxstarter.
+#>
 
-# Add Chocolatey bin directory to PATH
-$env:Path = "$env:Path;C:\ProgramData\chocolatey\bin"
+Set-StrictMode -Version Latest
 
-# Install Boxstarter
-. { iwr -useb http://boxstarter.org/bootstrapper.ps1 } | iex; get-boxstarter -Force
+###########################################################################
+### Constants
 
-# Checking if running from the bootstrapper
-if (!(Get-Command "Install-BoxstarterPackage" -ErrorAction SilentlyContinue)) {
-    # If not, install Boxstarter
-    . { iwr -useb http://boxstarter.org/bootstrapper.ps1 } | iex; get-boxstarter -Force
-}
-#
-# Run this boxstarter by calling the following from an **elevated** command-prompt:
-# 	start http://boxstarter.org/package/nr/url?<URL-TO-RAW-GIST>
-# OR
-# 	Install-BoxstarterPackage -PackageName <URL-TO-RAW-GIST> -DisableReboots
-#
-# Learn more: http://boxstarter.org/Learn/WebLauncher
+Get-CimInstance Win32_ComputerSystem `
+| Select-Object -ExpandProperty SystemType `
+| Set-Variable -Name ARCH -Option Constant -Scope local
+Get-CimInstance win32_OperatingSystem `
+| Select-Object -ExpandProperty Version `
+| Set-Variable -Name WINVER -Option Constant -Scope local
+Join-Path $env:TEMP 'rtp.setup.windows.tmp' `
+| Set-Variable -Name RUNNING_FILE -Option Constant -Scope local
 
-#---- EXECUTION POLICY ----
-Update-ExecutionPolicy Unrestricted -Force
+$ARCH -like 'ARM64*' `
+| Set-Variable -Name IS_ARM64 -Option Constant -Scope local
+$WINVER -match '^1(0|1)\.' `
+| Set-Variable -Name IS_WIN1X -Option Constant -Scope local
 
-#---- TEMPORARY ----
-Disable-UAC
-Disable-MicrosoftUpdate
+$global:CHOCO_INSTALLS = @()
 
-#---- Windows Settings ----
-Disable-BingSearch
-Disable-GameBarTips
-Enable-RemoteDesktop
+###########################################################################
+### Functions
 
-#---- Quick Access & Taskbar Settings ----
-Set-WindowsExplorerOptions -DisableHiddenFilesFoldersDrives -DisableShowProtectedOSFiles -DisableShowFileExtensions -DisableShowRecentFilesInQuickAccess -DisableShowFrequentFoldersInQuickAccess -EnableItemCheckBox -EnableExpandToOpenFolder
-Set-BoxstarterTaskbarOptions -UnLock -Size Small -Dock Bottom -Combine Always -AlwaysShowIconsOn -NoAutoHide -MultiMonitorOn -MultiMonitorMode All -MultiMonitorCombine Always
-
-#---- Windows Subsystems/Features ----
-# choco install Microsoft-Hyper-V-All -source windowsFeatures
-# choco install Microsoft-Windows-Subsystem-Linux -source windowsfeatures
-
-#---- Tools ----
-# choco install git -params '"/GitAndUnixToolsOnPath /WindowsTerminal"' -y
-# choco install poshgit
-# choco install sysinternals -y
-# choco install vim
-choco install vcredist140
-
-#---- Apps ----
-choco install googlechrome
-choco install office365business
-choco install 7zip
-choco install foxitreader
-choco install freecad
-choco install malwarebytes
-
-
-#---- Uninstall unecessary applications that come with Windows out of the box ----
-
-# 3D Builder
-Get-AppxPackage Microsoft.3DBuilder | Remove-AppxPackage
-# Alarms
-Get-AppxPackage Microsoft.WindowsAlarms | Remove-AppxPackage
-# Autodesk
-Get-AppxPackage *Autodesk* | Remove-AppxPackage
-# Bing Weather, News, Sports, and Finance (Money):
-Get-AppxPackage Microsoft.BingFinance | Remove-AppxPackage
-Get-AppxPackage Microsoft.BingNews | Remove-AppxPackage
-Get-AppxPackage Microsoft.BingSports | Remove-AppxPackage
-Get-AppxPackage Microsoft.BingWeather | Remove-AppxPackage
-# BubbleWitch
-Get-AppxPackage *BubbleWitch* | Remove-AppxPackage
-# Candy Crush
-Get-AppxPackage king.com.CandyCrush* | Remove-AppxPackage
-# Comms Phone
-Get-AppxPackage Microsoft.CommsPhone | Remove-AppxPackage
-# Dell
-#Get-AppxPackage *Dell* | Remove-AppxPackage
-# Dropbox
-Get-AppxPackage *Dropbox* | Remove-AppxPackage
-# Facebook
-Get-AppxPackage *Facebook* | Remove-AppxPackage
-# Feedback Hub
-Get-AppxPackage Microsoft.WindowsFeedbackHub | Remove-AppxPackage
-# Get Started
-Get-AppxPackage Microsoft.Getstarted | Remove-AppxPackage
-# Keeper
-Get-AppxPackage *Keeper* | Remove-AppxPackage
-# Mail & Calendar
-Get-AppxPackage microsoft.windowscommunicationsapps | Remove-AppxPackage
-# Maps
-Get-AppxPackage Microsoft.WindowsMaps | Remove-AppxPackage
-# March of Empires
-Get-AppxPackage *MarchofEmpires* | Remove-AppxPackage
-# McAfee Security
-Get-AppxPackage *McAfee* | Remove-AppxPackage
-# Uninstall McAfee Security App
-$mcafee = Get-ChildItem "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall" | ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_ -match "McAfee Security" } | Select-Object UninstallString
-if ($mcafee) {
-	$mcafee = $mcafee.UninstallString -Replace "C:\Program Files\McAfee\MSC\mcuihost.exe",""
-	Write-Output "Uninstalling McAfee..."
-	start-process "C:\Program Files\McAfee\MSC\mcuihost.exe" -arg "$mcafee" -Wait
+# RTP-General -------------------------------------------------------------
+function Add-RtpGeneral()
+{
+  $global:CHOCO_INSTALLS += , @(
+  'vcredist-all', 
+  'googlechrome', 
+  'office365business', 
+  '7zip',
+  'foxitreader'
+  'freecad', 
+  'malwarebytes'
+  )
+  <#
+  .SYNOPSIS
+  Add the queue of audio and broadcasting tools to install.
+  #>
 }
 
-# Messaging
-Get-AppxPackage Microsoft.Messaging | Remove-AppxPackage
-# Minecraft
-Get-AppxPackage *Minecraft* | Remove-AppxPackage
-# Netflix
-Get-AppxPackage *Netflix* | Remove-AppxPackage
-# Office Hub
-#Get-AppxPackage Microsoft.MicrosoftOfficeHub | Remove-AppxPackage
-# One Connect
-#Get-AppxPackage Microsoft.OneConnect | Remove-AppxPackage
-# OneNote
-#Get-AppxPackage Microsoft.Office.OneNote | Remove-AppxPackage
-# People
-Get-AppxPackage Microsoft.People | Remove-AppxPackage
-# Phone
-Get-AppxPackage Microsoft.WindowsPhone | Remove-AppxPackage
-# Photos
-Get-AppxPackage Microsoft.Windows.Photos | Remove-AppxPackage
-# Plex
-Get-AppxPackage *Plex* | Remove-AppxPackage
-# Skype (Metro version)
-Get-AppxPackage Microsoft.SkypeApp | Remove-AppxPackage
-# Sound Recorder
-#Get-AppxPackage Microsoft.WindowsSoundRecorder | Remove-AppxPackage
-# Solitaire
-Get-AppxPackage *Solitaire* | Remove-AppxPackage
-# Spotify
-Get-AppxPackage *Spotify* | Remove-AppxPackage
-# Sticky Notes
-Get-AppxPackage Microsoft.MicrosoftStickyNotes | Remove-AppxPackage
-# Sway
-Get-AppxPackage Microsoft.Office.Sway | Remove-AppxPackage
-# Twitter
-Get-AppxPackage *Twitter* | Remove-AppxPackage
-# Xbox
-Get-AppxPackage Microsoft.XboxApp | Remove-AppxPackage
-Get-AppxPackage Microsoft.XboxIdentityProvider | Remove-AppxPackage
-# Zune Music, Movies & TV
-Get-AppxPackage Microsoft.ZuneMusic | Remove-AppxPackage
-Get-AppxPackage Microsoft.ZuneVideo | Remove-AppxPackage
-
-
-#---- Windows Settings ----
-# Some from: @NickCraver's gist https://gist.github.com/NickCraver/7ebf9efbfd0c3eab72e9
-
-# Privacy: Let apps use my advertising ID: Disable
-If (-Not (Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo")) {
-    New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo | Out-Null
+function Add-FontsInstallation()
+{
+#  $global:CHOCO_INSTALLS += , @(
+#    'cascadiafonts',
+#    'firacode',
+#    'font-hackgen',
+#    'font-hackgen-nerd',
+#    'lato'
+#  )
+  <#
+  .SYNOPSIS
+  Add the queue of fonts to install.
+  #>
 }
-Set-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo -Name Enabled -Type DWord -Value 0
 
-# WiFi Sense: HotSpot Sharing: Disable
-If (-Not (Test-Path "HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting")) {
-    New-Item -Path HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting | Out-Null
+function Add-ShellExtensionsInstallation()
+{
+  $global:CHOCO_INSTALLS += @(
+    @('powershell'), # !! DEPENDENCIES
+    @(
+      'pwsh',
+      '--install-arguments="ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1 REGISTER_MANIFEST=1 ENABLE_PSREMOTING=1 USE_MU=1 ENABLE_MU=1"',
+      '--packageparameters "/CleanUpPath"'
+    ),
+    @(
+      'oh-my-posh',
+      'poshgit' # ! <- CLI ERROR (but not stack)
+    )
+  )
+  <#
+  .SYNOPSIS
+  Add the queue of shell extensions to install.
+  #>
 }
-Set-ItemProperty -Path HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting -Name value -Type DWord -Value 0
 
-# WiFi Sense: Shared HotSpot Auto-Connect: Disable
-Set-ItemProperty -Path HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots -Name value -Type DWord -Value 0
+# Get ---------------------------------------------------------------------
+function Get-OpenSSHInstalls()
+{
+  Get-WindowsCapability -Online `
+  | Where-Object -Property Name -Match OpenSSH `
+  | Where-Object -Property State -EQ Installed `
+  | Measure-Object `
+  | Select-Object -ExpandProperty Count
+  <#
+  .SYNOPSIS
+  Get the number of OpenSSH installations.
+  #>
+}
 
-# Start Menu: Disable Bing Search Results
-Set-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search -Name BingSearchEnabled -Type DWord -Value 0
-# To Restore (Enabled):
-# Set-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search -Name BingSearchEnabled -Type DWord -Value 1
+# Install -----------------------------------------------------------------
+function Install-ChocoPackages()
+{
+  $global:CHOCO_INSTALLS | ForEach-Object {
+    choco install @_
+  }
+  <#
+  .SYNOPSIS
+  Install the queued packages with Chocolatey.
+  #>
+}
 
-# Disable Xbox Gamebar
-Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR" -Name AppCaptureEnabled -Type DWord -Value 0
-Set-ItemProperty -Path "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -Type DWord -Value 0
+function Install-SomeWindowsCapability()
+{
+  $installList = @(
+    # Languages and fonts
+    'en-US',
+    'es-ES',
+    'fr-FR',
+    'zh-CN',
+#    'Language.Basic.*ja-JP', # ! ERROR?? on Vagrant Win10 (intel)
+#    'Language.Fonts.Jpan'
+
+    # Others
+    'DirectX'
+#    'OpenSSH',
+ #   'ShellComponents',
+    # 'StorageManagement', # ! ERROR?? on Vagrant Win11 (intel)
+#    'Tools.DeveloperMode.Core',
+#    'XPS.Viewer'
+  )
+
+  $caps = Get-WindowsCapability -Online `
+  | Where-Object -Property State -NE Installed
+  $installList | ForEach-Object {
+    $target = $_
+    $caps `
+    | Where-Object -Property Name -Match $target `
+    | Select-Object -ExpandProperty Name
+  } | ForEach-Object {
+    Write-BoxstarterMessage ('installing {0}...' -f $_)
+    Add-WindowsCapability `
+      -Name $_ `
+      -ErrorAction:SilentlyContinue `
+      -Online
+  }
+
+  <#
+  .SYNOPSIS
+  Install the queued Windows capabilities.
+  #>
+}
+
+function Install-SomeWindowsFeatures()
+{
+  $installList = @(
+    # Virtualization
+#    'Microsoft-Hyper-V-All',
+#    'VirtualMachinePlatform',
+#    'HypervisorPlatform',
+#    'Microsoft-Windows-Subsystem-Linux',
+
+    # NFS
+#    'ServicesForNFS-ClientOnly',
+#    'ClientForNFS-Infrastructure',
+#    'NFS-administration',
+
+    # Connection
+#    'TelnetClient',
+#    'TFTP',
+
+    # Others
+#    'NetFx3',
+#    'TIFFIFilter',
+    'Windows-Defender-ApplicationGuard'
+  )
+  try
+  {
+    $disabledFeatures = choco find -s windowsfeatures `
+    | Select-String Disabled `
+    | Select-Object -ExpandProperty Line `
+    | Select-String -Pattern '^[A-Za-z0-9-]+' `
+    | Select-Object -ExpandProperty Matches `
+    | Select-Object -ExpandProperty Value
+    $diff = Compare-Object `
+      -ReferenceObject $installList `
+      -DifferenceObject $disabledFeatures `
+      -PassThru `
+      -IncludeEqual `
+      -ExcludeDifferent
+    choco install @diff -s windowsfeatures
+  }
+  catch
+  {
+    Write-BoxstarterMessage `
+      -message 'Notice: Chocolatey search for Windows features failed so it will install all listed components. So slightly increases the installation process but does not affect the installation results.' `
+      -nologo `
+      -color DarkYellow
+    choco install @installList -s windowsfeatures
+  }
+  <#
+  .SYNOPSIS
+  Install some Windows features.
+  #>
+}
+
+# Pop ---------------------------------------------------------------------
+function Pop-Preparation()
+{
+  Remove-Item $RUNNING_FILE -Force
+  Enable-UAC
+  <#
+  .SYNOPSIS
+  Remove the preparation settings.
+  #>
+}
+
+# Push --------------------------------------------------------------------
+function Push-Preparation()
+{
+  New-Item -Type File $RUNNING_FILE -Force | Out-Null
+  Disable-UAC
+  <#
+  .SYNOPSIS
+  Set the preparation settings.
+  #>
+}
+
+# Remove ------------------------------------------------------------------
+function Remove-SomeAppx()
+{
+  @(
+    '*BubbleWitch*',
+    '*DisneyMagicKingdom*',
+    '*DolbyAccess*',
+    'king.com.CandyCrush*',
+    '*HiddenCityMysteryofShadows*',
+    '*MarchofEmpires*',
+    '*Netflix*',
+    '*Spotify*',
+    '*Facebook*',
+    '*McAfee*',
+    'Microsoft.BingFinance',
+    'Microsoft.BingNews',
+    'Microsoft.BingSports',
+    'Microsoft.BingWeather',
+    'Microsoft.MicrosoftOfficeHub'
+  ) | ForEach-Object { Get-AppxPackage $_ | Remove-AppxPackage }
+  <#
+  .SYNOPSIS
+  Remove some Appx packages.
+  #>
+}
+
+# Set ---------------------------------------------------------------------
+function Set-ChocoFeatures()
+{
+  choco feature disable -n=skipPackageUpgradesWhenNotInstalled
+  choco feature enable -n=useRememberedArgumentsForUpgrades
+  <#
+  .SYNOPSIS
+  Set the Chocolatey features.
+  #>
+}
+
+function Set-CleanManagerSageSet()
+{
+  $baseUri = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\'
+  $keys = @(
+    'Active Setup Temp Folders',
+    'BranchCache',
+    'D3D Shader Cache',
+    'Delivery Optimization Files',
+    'Diagnostic Data Viewer database files',
+    'Downloaded Program Files',
+    'Internet Cache Files',
+    'Old ChkDsk Files',
+    'Recycle Bin',
+    'RetailDemo Offline Content',
+    'Setup Log Files',
+    'System error memory dump files',
+    'System error minidump files',
+    'Temporary Files',
+    'Thumbnail Cache',
+    'Update Cleanup',
+    'User file versions',
+    'Windows Defender',
+    'Windows Error Reporting Files'
+  )
+  $keys | ForEach-Object {
+    New-ItemProperty `
+      -Path ($baseUri + $_) `
+      -Name StateFlags0001 `
+      -PropertyType DWord `
+      -Value 2 `
+      -Force `
+    | Out-Null
+  }
+  <#
+  .SYNOPSIS
+  Set the CleanManager SageSet.
+  #>
+}
+
+function Set-WindowsOptions()
+{
+#  Set-CornerNavigationOptions -EnableUpperLeftCornerSwitchApps -EnableUsePowerShellOnWinX
+  Set-WindowsExplorerOptions -DisableHiddenFilesFoldersDrives -DisableShowProtectedOSFiles -DisableShowFileExtensions -DisableShowRecentFilesInQuickAccess -DisableShowFrequentFoldersInQuickAccess -EnableItemCheckBox -EnableExpandToOpenFolder
+#  Set-StartScreenOptions -DisableBootToDesktop -EnableShowStartOnActiveScreen -EnableShowAppsViewOnStartScreen -EnableSearchEverywhereInAppsView -DisableListDesktopAppsFirst
+  Set-BoxstarterTaskbarOptions -UnLock -Size Small -Dock Bottom -Combine Always -AlwaysShowIconsOn -NoAutoHide -MultiMonitorOn -MultiMonitorMode All -MultiMonitorCombine Always
+  Enable-RemoteDesktop
+  Disable-BingSearch
+  Disable-GameBarTips
+
+  ### Explorer options
+#  Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name NavPaneExpandToCurrentFolder -Value 1
+#  Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name SeparateProcess -Value 1
+  Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowCompColor -Value 1
+
+  ### Taskbar options
+#  Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Search -Name SearchboxTaskbarMode -Value 1
+  <#
+  .SYNOPSIS
+  Set the Windows options.
+  #>
+}
+
+###########################################################################
+### Main
+
+Push-Preparation
+Set-ChocoFeatures
+choco install boxstarter chocolatey
+
+###########################################################################
+### Windows Features
+
+Remove-SomeAppx
+Set-WindowsOptions
+
+Set-CleanManagerSageSet
+cleanmgr /dc /sagerun:1
+
+Install-SomeWindowsCapability
+Install-SomeWindowsFeatures
+
+###########################################################################
+### Install apps via Chocolatey
+
+Add-RtpGeneral
+Add-ShellExtensionsInstallation
+Add-FontsInstallation
+
+Install-ChocoPackages
+
+###########################################################################
+### Install apps via without Chocolatey
+
+#Invoke-WebRequest -useb get.scoop.sh | Invoke-Expression
+
+###########################################################################
 
 #---- Group Policy Settings ----
 #---- Group Policy Changes ----
@@ -224,11 +396,40 @@ secedit /configure /db %windir%\security\local.sdb /cfg "$env:TEMP\securityPolic
 Remove-Item "$env:TEMP\securityPolicy.inf" -Force
 #---- End Group Policy Changes ----
 
+##########################################################################
 
-#---- Restore Temporary Settings ----
-Enable-UAC
+#---- Windows Settings ----
+# Some from: @NickCraver's gist https://gist.github.com/NickCraver/7ebf9efbfd0c3eab72e9
+
+# Privacy: Let apps use my advertising ID: Disable
+If (-Not (Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo")) {
+    New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo | Out-Null
+}
+Set-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo -Name Enabled -Type DWord -Value 0
+
+# WiFi Sense: HotSpot Sharing: Disable
+If (-Not (Test-Path "HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting")) {
+    New-Item -Path HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting | Out-Null
+}
+Set-ItemProperty -Path HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting -Name value -Type DWord -Value 0
+
+# WiFi Sense: Shared HotSpot Auto-Connect: Disable
+Set-ItemProperty -Path HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots -Name value -Type DWord -Value 0
+
+# Start Menu: Disable Bing Search Results
+Set-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search -Name BingSearchEnabled -Type DWord -Value 0
+# To Restore (Enabled):
+# Set-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search -Name BingSearchEnabled -Type DWord -Value 1
+
+# Disable Xbox Gamebar
+Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR" -Name AppCaptureEnabled -Type DWord -Value 0
+Set-ItemProperty -Path "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -Type DWord -Value 0
+
+###########################################################################
+### Update
 Enable-MicrosoftUpdate
-Install-WindowsUpdate -acceptEula
+Install-WindowsUpdate
 
-Stop-Transcript
-Write-Output "Logging completed. Check $LogPath for details."
+###########################################################################
+### Teardown
+Pop-Preparation
