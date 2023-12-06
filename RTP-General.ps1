@@ -7,7 +7,7 @@
 # To use:
 #   From a fresh box, open Edge browser and enter this URL: https://boxstarter.org/package/url?https://github.com/seanrtprime/Boxstarter-Packages/blob/main/RTP-General.ps1
 #
-LogPath = "$env:TEMP\Boxstarter_Log.txt"
+LogPath = "C:\TEMP\Boxstarter_Log.txt"
 Start-Transcript -Path $LogPath
 #
 # Install Chocolatey and Boxstarter: -- You might need to set: Set-ExecutionPolicy RemoteSigned --
@@ -15,9 +15,6 @@ Start-Transcript -Path $LogPath
 $env:Path = "$env:Path;C:\ProgramData\chocolatey\bin"
 . { iwr -useb http://boxstarter.org/bootstrapper.ps1 } | iex; get-boxstarter -Force
 #
-# Ensure Chocolatey is in the PATH
-$env:Path = "$env:Path;C:\ProgramData\chocolatey\bin"
-
 # Checking if running from the bootstrapper
 if (!(Get-Command "Install-BoxstarterPackage" -ErrorAction SilentlyContinue)) {
     # If not, install Boxstarter
