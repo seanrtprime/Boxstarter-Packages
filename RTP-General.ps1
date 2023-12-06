@@ -7,11 +7,18 @@
 # To use:
 #   From a fresh box, open Edge browser and enter this URL: https://boxstarter.org/package/url?https://github.com/seanrtprime/Boxstarter-Packages/blob/main/RTP-General.ps1
 #
-#
-# Install boxstarter:
-# 	. { iwr -useb http://boxstarter.org/bootstrapper.ps1 } | iex; get-boxstarter -Force
-#
-# You might need to set: Set-ExecutionPolicy RemoteSigned
+# Install Boxstarter and Chocolatey: -- You might need to set: Set-ExecutionPolicy RemoteSigned--
+. { iwr -useb http://boxstarter.org/bootstrapper.ps1 } | iex; get-boxstarter -Force
+iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+
+# Ensure Chocolatey is in the PATH
+$env:Path = "$env:Path;C:\ProgramData\chocolatey\bin"
+
+# Checking if running from the bootstrapper
+if (!(Get-Command "Install-BoxstarterPackage" -ErrorAction SilentlyContinue)) {
+    # If not, install Boxstarter
+    . { iwr -useb http://boxstarter.org/bootstrapper.ps1 } | iex; get-boxstarter -Force
+}
 #
 # Run this boxstarter by calling the following from an **elevated** command-prompt:
 # 	start http://boxstarter.org/package/nr/url?<URL-TO-RAW-GIST>
