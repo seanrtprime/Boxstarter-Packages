@@ -12,7 +12,7 @@
 #
 # 3.  Run the following in BoxstarterShell or admin PowerShell:
 #       Set-ExecutionPolicy RemoteSigned
-#       Install-BoxstarterPackage -PackageName https://gist.githubusercontent.com/seanrtprime/f8352f49ff1fbf23ccf9cfcb24b2dc57/raw/9099dd5864f0d5883367dbc2a259927a4d9af606/RTinstall.ps1
+#       Install-BoxstarterPackage -PackageName https://raw.githubusercontent.com/seanrtprime/Boxstarter-Packages/main/RTPinstall.ps1
 #
 # 
 #
