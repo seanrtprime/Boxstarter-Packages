@@ -70,6 +70,11 @@ $applicationList = @(
     "*McAfee*"
     "*Minecraft*"
     "*Twitter*"
+    "*Kindle*"
+    "*LinkedIn*"
+    "*Camo Studio*"
+    "*Clipchamp*"
+    "*WhatsApp*"
 
 #    "*outlook*"
 #    "*onedrive*"
@@ -169,7 +174,7 @@ try {
 # Apps
 
 $applicationList = @(
-  "googlechrome"
+  "googlechrome --ignore-checksums"
   "7zip"
   "freecad"
   "foxitreader"
@@ -182,11 +187,42 @@ foreach ($app in $applicationList) {
     choco install -y $app
 }
 
-
+#------------------------------------------------------------------------------
 #Time Settings
+#------------------------------------------------------------------------------
 w32TM /config /syncfromflags:manual /manualpeerlist:time.google.com
 w32tm /config /update
 w32tm /resync
+
+
+#------------------------------------------------------------------------------
+# Group Policy Changes
+#------------------------------------------------------------------------------
+
+# Enforce password history (2 passwords remembered)
+$enforcePasswordHistory = 2
+$enforcePasswordHistoryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\PasswordPolicy"
+if (-not (Test-Path $enforcePasswordHistoryPath)) {
+    New-Item -Path $enforcePasswordHistoryPath -Force | Out-Null
+}
+Set-ItemProperty -Path $enforcePasswordHistoryPath -Name "PasswordHistorySize" -Value $enforcePasswordHistory
+
+# Maximum password age (365 days)
+$maxPasswordAge = 365
+$maxPasswordAgePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+if (-not (Test-Path $maxPasswordAgePath)) {
+    New-Item -Path $maxPasswordAgePath -Force | Out-Null
+}
+Set-ItemProperty -Path $maxPasswordAgePath -Name "MaxPasswordAge" -Value $maxPasswordAge
+
+# Minimum password length (6 characters)
+$minPasswordLength = 6
+$minPasswordLengthPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+if (-not (Test-Path $minPasswordLengthPath)) {
+    New-Item -Path $minPasswordLengthPath -Force | Out-Null
+}
+Set-ItemProperty -Path $minPasswordLengthPath -Name "MinimumPasswordLength" -Value $minPasswordLength
+
 
 #------------------------------------------------------------------------------
 # Restore Temporary Settings
